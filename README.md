@@ -1,10 +1,10 @@
-# Reverse A/B Test Calculator
+# Multi-Mode A/B Test Calculator
 
-This tool calculates the Minimum Detectable Effect (MDE) for an A/B test given a fixed sample size. It's based on the statistical methodology used in Evan Miller's Sample Size Calculator but works in reverse - instead of calculating the required sample size for a given MDE, it calculates the smallest effect size you can reliably detect with your available sample size.
+This tool calculates the Minimum Detectable Effect (MDE) for an A/B test given a fixed sample size. It's based on the statistical methodology used in Evan Miller's Sample Size Calculator but works in more flexible ways - instead of calculating the required sample size for a given MDE, it calculates the smallest effect size you can reliably detect with your available sample size.
 
 ## Why This Calculator?
 
-Most A/B test calculators tell you how many samples you need for a given effect size. However, in the real world, teams often face fixed traffic constraints or time limitations. This calculator solves the reverse problem, helping teams understand what they can realistically test with their available sample size. Here's why this is valuable:
+Most A/B test calculators tell you how many samples you need for a given effect size. However, in the real world, teams often face fixed traffic constraints or time limitations. This calculator also solves the reverse problem, helping teams understand what they can realistically test with their available sample size. Here's why this is valuable:
 
 1. **Practical Reality Check**: Instead of asking "how many users do I need?" (which you might not be able to control), you can ask "what's the smallest change I can reliably detect?" This helps set realistic expectations for your A/B tests.
 
@@ -22,7 +22,7 @@ Most A/B test calculators tell you how many samples you need for a given effect 
 
 4. **Complementary to Standard Calculators**:
    - Traditional calculators tell you required sample size
-   - This reverse calculator answers the opposite question
+   - This Multi-Mode calculator can answer the opposite question
    - Together, they provide a complete picture for test planning
 
 5. **Educational Tool**:
@@ -33,11 +33,15 @@ This calculator is particularly valuable for product teams, growth teams, and an
 
 ## Features
 
-- Calculate MDE given sample size and baseline conversion rate
-- Interactive sliders for all parameters
-- Visual power analysis curve
+- Two calculation modes:
+  - Calculate MDE from sample size per variation
+  - Calculate MDE from total population size
+- Interactive sliders for statistical parameters
+- Visual power analysis curve with detectable zones
 - Both relative and absolute effect size calculations
 - Statistical power and significance level customization
+- Real-time updates as you adjust parameters
+- Detailed results explanation for each calculation
 
 ## Installation
 
@@ -95,21 +99,39 @@ enableCORS = false
 
 ## Parameters
 
-- **Sample Size**: Number of subjects per variation (A/B groups)
+- **Mode Selection**: Choose between calculating from sample size or total population
 - **Baseline Conversion Rate**: Your current conversion rate
 - **Statistical Power**: Probability of detecting a true effect (typically 0.8)
 - **Significance Level**: Probability of false positive (typically 0.05)
 
+For "Calculate from sample size" mode:
+- **Sample Size**: Number of subjects per variation (A/B groups)
+- **Desired MDE**: Optional target minimum detectable effect
+
+For "Calculate from total population" mode:
+- **Total Population**: Total number of subjects available
+- **Number of Variants**: Number of variations to test (e.g., 2 for A/B, 3 for A/B/C)
+- **Desired MDE**: Optional target minimum detectable effect
+
 ## How It Works
 
-The calculator uses a binary search algorithm to find the smallest effect size that achieves the desired statistical power, given your sample size and other parameters. It takes into account:
+The calculator uses a binary search algorithm to find the smallest effect size that achieves the desired statistical power. It can work in two modes:
 
-- The baseline conversion rate
-- The required statistical power (typically 80%)
-- The significance level (typically 5%)
-- The sample size per variation
+1. **Sample Size Mode**: Given a fixed sample size per variation, it calculates:
+   - The minimum detectable effect (MDE)
+   - The absolute change that can be detected
+   - Required sample size for a desired MDE
 
-The power analysis curve shows how the statistical power changes with different effect sizes, helping you understand the sensitivity of your test.
+2. **Total Population Mode**: Given a total population size, it:
+   - Splits the population among the specified number of variants
+   - Calculates the MDE based on the per-variant sample size
+   - Shows required total population for a desired MDE
+
+The power analysis curve visualizes:
+- The relationship between effect size and statistical power
+- Detectable increase and decrease zones
+- Current MDE thresholds
+- Optional desired MDE thresholds
 
 ## License
 
