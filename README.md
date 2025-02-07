@@ -2,6 +2,35 @@
 
 This tool calculates the Minimum Detectable Effect (MDE) for an A/B test given a fixed sample size. It's based on the statistical methodology used in Evan Miller's Sample Size Calculator but works in reverse - instead of calculating the required sample size for a given MDE, it calculates the smallest effect size you can reliably detect with your available sample size.
 
+## Why This Calculator?
+
+Most A/B test calculators tell you how many samples you need for a given effect size. However, in the real world, teams often face fixed traffic constraints or time limitations. This calculator solves the reverse problem, helping teams understand what they can realistically test with their available sample size. Here's why this is valuable:
+
+1. **Practical Reality Check**: Instead of asking "how many users do I need?" (which you might not be able to control), you can ask "what's the smallest change I can reliably detect?" This helps set realistic expectations for your A/B tests.
+
+2. **Resource Planning**: 
+   - If the MDE is too high for your business needs, you know you need to:
+     - Wait longer to collect more samples
+     - Find ways to increase traffic
+     - Or consider other testing approaches
+   - If the MDE is lower than needed, you might be able to run shorter tests
+
+3. **Risk Assessment**:
+   - Helps teams understand if they have enough statistical power to detect meaningful changes
+   - Prevents teams from running underpowered tests that might miss important effects
+   - Helps avoid wasting time on tests that can't detect business-relevant changes
+
+4. **Complementary to Standard Calculators**:
+   - Traditional calculators tell you required sample size
+   - This reverse calculator answers the opposite question
+   - Together, they provide a complete picture for test planning
+
+5. **Educational Tool**:
+   - The visual power analysis curve helps teams understand the relationship between sample size, effect size, and statistical power
+   - Makes statistical concepts more tangible for non-technical stakeholders
+
+This calculator is particularly valuable for product teams, growth teams, and anyone doing online experimentation with fixed traffic constraints - a very common real-world scenario.
+
 ## Features
 
 - Calculate MDE given sample size and baseline conversion rate
