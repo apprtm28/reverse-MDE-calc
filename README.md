@@ -102,7 +102,7 @@ enableCORS = false
 - **Mode Selection**: Choose between calculating from sample size or total population
 - **Baseline Conversion Rate**: Your current conversion rate
 - **Statistical Power**: Probability of detecting a true effect (typically 0.8)
-- **Significance Level**: Probability of false positive (typically 0.05)
+- **Alpha (α)**: One minus the confidence level (typically 0.05 for 95% confidence)
 
 For "Calculate from sample size" mode:
 - **Sample Size**: Number of subjects per variation (A/B groups)
