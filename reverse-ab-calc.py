@@ -2,6 +2,12 @@ import streamlit as st
 import numpy as np
 from scipy import stats
 import plotly.graph_objects as go
+import os
+
+# Ensure the app uses the correct port from the environment
+port = int(os.environ.get("PORT", 8501))
+# Optional debugging message that appears at the top of the app
+# st.write(f"Running on port: {port}")
 
 def calculate_mde(sample_size, baseline_rate, power=0.8, significance_level=0.05):
     """
