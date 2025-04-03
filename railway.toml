@@ -6,5 +6,5 @@ buildCommand = "pip install -r requirements.txt"
 startCommand = "sh setup.sh && streamlit run reverse-ab-calc.py --server.port=$PORT --server.address=0.0.0.0 --server.enableCORS=false --server.enableXsrfProtection=false"
 healthcheckPath = "/"
 healthcheckTimeout = 300
-restartPolicyType = "on-failure"
+restartPolicyType = "always"
 restartPolicyMaxRetries = 5 
