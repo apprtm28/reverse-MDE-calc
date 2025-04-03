@@ -1,1 +1,1 @@
-web: streamlit run reverse-ab-calc.py 
+web: sh setup.sh && streamlit run reverse-ab-calc.py --server.port=$PORT --server.address=0.0.0.0 --server.enableCORS=false --server.enableXsrfProtection=false 
