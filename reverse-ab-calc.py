@@ -9,71 +9,108 @@ port = int(os.environ.get("PORT", 8501))
 # Optional debugging message that appears at the top of the app
 # st.write(f"Running on port: {port}")
 
+def significance_to_z(significance_level, two_sided=True):
+    """Return the critical z-value for a significance level."""
+    tail = 2 if two_sided else 1
+    return stats.norm.ppf(1 - significance_level / tail)
+
+
+def two_proportion_power(effect_size, sample_size, baseline_rate,
+                         significance_level=0.05, two_sided=True):
+    """Statistical power of a two-proportion z-test for a relative effect size.
+
+    Both tails are included for a two-sided test, so a null effect yields a
+    power equal to the significance level (the Type I error rate).
+    """
+    if baseline_rate <= 0 or baseline_rate >= 1:
+        return 0.0
+    alternative_rate = baseline_rate * (1 + effect_size)
+    if alternative_rate <= 0:
+        return 0.0
+    alternative_rate = min(alternative_rate, 1.0)
+    p1, p2 = baseline_rate, alternative_rate
+    se = np.sqrt((p1 * (1 - p1) + p2 * (1 - p2)) / sample_size)
+    if se <= 0:
+        return 0.0
+    z_effect = abs(p2 - p1) / se
+    critical_value = significance_to_z(significance_level, two_sided)
+    power = stats.norm.cdf(z_effect - critical_value)
+    if two_sided:
+        power += stats.norm.cdf(-z_effect - critical_value)
+    return power
+
+
 def calculate_mde(sample_size, baseline_rate, power=0.8, significance_level=0.05):
     """
-    Calculate the Minimum Detectable Effect given sample size and other parameters.
+    Calculate the Minimum Detectable Effect (relative) for a fixed sample size.
     Uses binary search to find the smallest effect size that achieves the desired power.
     """
-    def power_analysis(effect_size):
-        # Calculate the alternative conversion rate (handles both positive and negative effects)
-        alternative_rate = baseline_rate * (1 + effect_size)
-        
-        # Calculate pooled standard error
-        p1, p2 = baseline_rate, alternative_rate
-        se = np.sqrt((p1 * (1-p1) + p2 * (1-p2)) / sample_size)
-        
-        # Calculate z-score for the difference
-        z_score = abs(p2 - p1) / se  # Use absolute value for two-sided test
-        
-        # Calculate power
-        critical_value = stats.norm.ppf(1 - significance_level/2)
-        actual_power = 1 - stats.norm.cdf(critical_value - z_score)
-        
-        return actual_power - power
-
-    # Binary search for MDE
-    left, right = 0.0001, 1.0
-    while right - left > 0.0001:
+    max_effect = (1.0 - baseline_rate) / baseline_rate
+    left, right = 1e-9, min(1.0, max_effect) * (1 - 1e-12)
+    while right - left > 1e-6:
         mid = (left + right) / 2
-        if power_analysis(mid) < 0:
+        if two_proportion_power(mid, sample_size, baseline_rate, significance_level) < power:
             left = mid
         else:
             right = mid
-    
     return (left + right) / 2
+
 
 def calculate_required_sample_size(mde, baseline_rate, power=0.8, significance_level=0.05):
     """
-    Calculate required sample size per variation given MDE and other parameters.
+    Calculate required sample size per variation for a relative MDE.
     Uses binary search to find the smallest sample size that achieves the desired power.
     """
-    def power_analysis(n):
-        # Calculate the alternative conversion rate
-        alternative_rate = baseline_rate * (1 + mde)
-        
-        # Calculate pooled standard error
-        p1, p2 = baseline_rate, alternative_rate
-        se = np.sqrt((p1 * (1-p1) + p2 * (1-p2)) / n)
-        
-        # Calculate z-score for the difference
-        z_score = (p2 - p1) / se
-        
-        # Calculate power
-        critical_value = stats.norm.ppf(1 - significance_level/2)
-        actual_power = 1 - stats.norm.cdf(critical_value - z_score)
-        
-        return actual_power - power
-
-    # Binary search for sample size
-    left, right = 100, 10000000  # Reasonable bounds for sample size
-    while right - left > 100:  # Precision of 100 samples
+    left, right = 1, 1_000_000_000
+    while right - left > 1:
         mid = (left + right) // 2
-        if power_analysis(mid) < 0:
+        if two_proportion_power(mde, mid, baseline_rate, significance_level) < power:
             left = mid
         else:
             right = mid
-    
-    return right  # Return the conservative estimate
+    return right
+
+
+def evaluate_test(traffic_control, conversions_control, traffic_variant, conversions_variant,
+                  significance_level=0.05, two_sided=True, alternative="greater"):
+    """Evaluate an A/B test and return rates, errors, test statistic and p-value.
+
+    For a one-sided test, ``alternative`` selects the pre-specified direction:
+    "greater" tests H1: variant rate > control rate, "less" tests the opposite.
+    """
+    cvr_control = conversions_control / traffic_control
+    cvr_variant = conversions_variant / traffic_variant
+    uplift = ((cvr_variant - cvr_control) / cvr_control) if cvr_control != 0 else 0.0
+
+    se_control = np.sqrt(cvr_control * (1 - cvr_control) / traffic_control)
+    se_variant = np.sqrt(cvr_variant * (1 - cvr_variant) / traffic_variant)
+    se_diff = np.sqrt(se_control ** 2 + se_variant ** 2)
+    z_score = (cvr_variant - cvr_control) / se_diff if se_diff != 0 else 0.0
+
+    if two_sided:
+        p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
+    elif alternative == "less":
+        p_value = stats.norm.cdf(z_score)
+    else:
+        p_value = 1 - stats.norm.cdf(z_score)
+
+    critical_value = significance_to_z(significance_level, two_sided)
+    ci_z = significance_to_z(significance_level, two_sided)
+
+    return {
+        "cvr_control": cvr_control,
+        "cvr_variant": cvr_variant,
+        "uplift": uplift,
+        "se_control": se_control,
+        "se_variant": se_variant,
+        "se_diff": se_diff,
+        "z_score": z_score,
+        "p_value": p_value,
+        "critical_value": critical_value,
+        "significant": p_value < significance_level,
+        "ci_control": ci_z * se_control,
+        "ci_variant": ci_z * se_variant,
+    }
 
 def main():
     st.set_page_config(page_title="Multi-Mode A/B Test Calculator", layout="wide")
@@ -238,11 +275,11 @@ def main():
               • ≤ {(baseline_rate * (1 - mde))*100:.1f}% (decrease of {mde*100:.1f}% or more)
               • ≥ {(baseline_rate * (1 + mde))*100:.1f}% (increase of {mde*100:.1f}% or more)
             - Changes smaller than ±{mde*100:.1f}% are in the undetectable zone
-            - Total samples needed: {sample_size*2:,} (across all variations)
+            - Total samples needed: {sample_size*2:,} (across 2 variations, A/B)
             
             **With desired MDE of ±{user_mde*100:.1f}%:**
             - You would need {required_sample_size:,} samples per variation
-            - Total samples needed: {required_sample_size*2:,} (across all variations)
+            - Total samples needed: {required_sample_size*2:,} (across 2 variations, A/B)
             """)
         else:
             col_res1, col_res2, col_res3 = st.columns(3)
@@ -284,15 +321,10 @@ def main():
         # Create power curve with both positive and negative effects
         max_effect = max(mde * 3, user_mde * 3) if abs(user_mde - mde) > 0.0001 else mde * 3
         effect_sizes = np.linspace(-max_effect, max_effect, 200)
-        powers = []
-        for effect in effect_sizes:
-            p1 = baseline_rate
-            p2 = baseline_rate * (1 + effect)
-            se = np.sqrt((p1 * (1-p1) + p2 * (1-p2)) / sample_size)
-            z_score = abs(p2 - p1) / se
-            critical_value = stats.norm.ppf(1 - significance/2)
-            actual_power = 1 - stats.norm.cdf(critical_value - z_score)
-            powers.append(actual_power)
+        powers = [
+            two_proportion_power(effect, sample_size, baseline_rate, significance, two_sided=True)
+            for effect in effect_sizes
+        ]
         
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -408,6 +440,15 @@ def main():
             horizontal=True,
             help="Choose one-tailed if you have a directional hypothesis (e.g., variant is expected to be higher) or two-tailed for a non-directional hypothesis"
         )
+        if test_type == "One-Tailed":
+            direction = st.radio(
+                "Expected Direction:",
+                options=["Variant is higher than control", "Variant is lower than control"],
+                horizontal=True,
+                help="The pre-specified direction of your one-tailed hypothesis"
+            )
+        else:
+            direction = "Variant is higher than control"
         confidence_option = st.selectbox(
             "Select Confidence Level:",
             options=["90%", "95%", "99%"],
@@ -418,41 +459,38 @@ def main():
         significance = 1 - confidence
         
         if traffic_control > 0 and traffic_variant > 0:
-            # Calculate conversion rates
-            cvr_control = conv_control / traffic_control
-            cvr_variant = conv_variant / traffic_variant
-            uplift = ((cvr_variant - cvr_control) / cvr_control * 100) if cvr_control != 0 else 0
-            
-            # Standard errors
-            se_control = np.sqrt(cvr_control * (1 - cvr_control) / traffic_control)
-            se_variant = np.sqrt(cvr_variant * (1 - cvr_variant) / traffic_variant)
-            se_diff = np.sqrt(se_control**2 + se_variant**2)
-            
-            # Z-score and p-value
-            z_score = (cvr_variant - cvr_control) / se_diff if se_diff != 0 else 0
-            
-            if test_type == "Two-Tailed":
-                p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
-                critical_value = stats.norm.ppf(1 - significance/2)
-            else:
-                # Assume alternative is that variant > control.
-                if z_score >= 0:
-                    p_value = 1 - stats.norm.cdf(z_score)
-                else:
-                    p_value = stats.norm.cdf(z_score)
-                critical_value = stats.norm.ppf(1 - significance)
-            
+            if conv_control > traffic_control or conv_variant > traffic_variant:
+                st.error("Conversions cannot exceed traffic for either group.")
+                st.stop()
+
+            two_sided = test_type == "Two-Tailed"
+            alternative = "greater" if direction == "Variant is higher than control" else "less"
+
+            result = evaluate_test(
+                traffic_control, conv_control, traffic_variant, conv_variant,
+                significance_level=significance, two_sided=two_sided, alternative=alternative,
+            )
+            cvr_control = result["cvr_control"]
+            cvr_variant = result["cvr_variant"]
+            uplift = result["uplift"] * 100
+            se_control = result["se_control"]
+            se_variant = result["se_variant"]
+            se_diff = result["se_diff"]
+            z_score = result["z_score"]
+            p_value = result["p_value"]
+            critical_value = result["critical_value"]
+            significant = result["significant"]
+
             observed_power = 1 - stats.norm.cdf(critical_value - abs(z_score))
-            
-            # Determine significance based on p-value
-            significant = p_value < significance
-            
+            relative_diff = ((cvr_variant - cvr_control) / cvr_control * 100) if cvr_control != 0 else 0.0
+
             # Prepare a descriptive message in a highlighted box.
             if significant:
+                direction_word = "higher" if relative_diff >= 0 else "lower"
                 result_message = (
                     f"**Significant test result!**\n\n"
                     f"Variation B's observed conversion rate ({cvr_variant*100:.2f}%) was "
-                    f"{((cvr_variant - cvr_control)/cvr_control*100):.2f}% higher than variation A's conversion rate ({cvr_control*100:.2f}%).\n\n"
+                    f"{abs(relative_diff):.2f}% {direction_word} than variation A's conversion rate ({cvr_control*100:.2f}%).\n\n"
                     f"You can be {confidence_option} confident that this result is due to the changes you made and not random chance."
                 )
                 result_box = st.success
@@ -460,7 +498,7 @@ def main():
                 result_message = (
                     f"**Not significant.**\n\n"
                     f"Variation B's observed conversion rate ({cvr_variant*100:.2f}%) was "
-                    f"{((cvr_variant - cvr_control)/cvr_control*100):.2f}% different from variation A's conversion rate ({cvr_control*100:.2f}%).\n\n"
+                    f"{relative_diff:+.2f}% different from variation A's conversion rate ({cvr_control*100:.2f}%).\n\n"
                     f"This difference is not statistically significant at the {confidence_option} confidence level."
                 )
                 result_box = st.warning
@@ -742,6 +780,11 @@ def main():
                 )
             
             st.plotly_chart(fig, use_container_width=True)
+            if plot_type == "Box Plot":
+                st.caption(
+                    "Note: overlapping confidence intervals do not by themselves imply a "
+                    "non-significant difference; the significance verdict is based on the p-value."
+                )
             
             # -------------------------------
             # 3. Show evaluation results in three rows of three columns each.
@@ -778,7 +821,7 @@ def main():
             # Row 2: Power, p-value, Z-score
             col4, col5, col6 = st.columns(3)
             with col4:
-                st.markdown("**Observed Power**")
+                st.markdown("**Post-hoc Power (observed)**")
                 st.markdown(f"""
                 <div style='background-color: #f5f5f5; padding: 10px; border-radius: 5px; margin-bottom: 25px;'>
                     {observed_power*100:.2f}%
@@ -800,6 +843,10 @@ def main():
                     {z_score:.4f}
                 </div>
                 """, unsafe_allow_html=True)
+            st.caption(
+                "Post-hoc power is derived from the observed effect and is reported for "
+                "completeness only; it is not a substitute for a priori power planning."
+            )
             
             # Row 3: Standard Errors
             col7, col8, col9 = st.columns(3)
